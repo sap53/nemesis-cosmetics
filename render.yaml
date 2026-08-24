@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: nemesis-cosmetics
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: COSMETIC_API_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: PRESENCE_TTL_SECONDS
+        value: "45"

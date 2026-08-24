@@ -1,0 +1,13 @@
+{
+  "name": "nemesis-cosmetic-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Realtime cosmetic presence service for the Nemesis client",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "engines": {
+    "node": ">=18 <25"
+  }
+}
