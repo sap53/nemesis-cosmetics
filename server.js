@@ -13,7 +13,10 @@ const COSMETIC_API_KEY = process.env.COSMETIC_API_KEY || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_QUERY_PLAYERS = 256;
-const RATE_LIMIT_PER_MINUTE = 120;
+// Clients watching another wing user poll at 10 Hz so animation state changes
+// arrive within roughly one network tick. Requests are tiny and all data is
+// kept in memory; this still leaves headroom for reconnects and retries.
+const RATE_LIMIT_PER_MINUTE = 900;
 const presences = new Map();
 const rateLimits = new Map();
 
@@ -84,6 +87,7 @@ const server = http.createServer(async (request, response) => {
         name: normalizeName(body.name),
         cape: normalizeCosmetic(body.cape),
         wings: normalizeCosmetic(body.wings),
+        wingState: normalizeWingState(body.wingState),
         clientVersion: normalizeVersion(body.clientVersion),
         updatedAt: now
       };
@@ -196,12 +200,20 @@ function normalizeVersion(value) {
   return String(value).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 24) || 'unknown';
 }
 
+function normalizeWingState(value) {
+  if (typeof value !== 'string') return 'IDLE';
+  const state = value.toUpperCase();
+  return state === 'LIFT' || state === 'GLIDE' || state === 'FALL' || state === 'LAND'
+    ? state : 'IDLE';
+}
+
 function publicPresence(value) {
   return {
     uuid: value.uuid,
     name: value.name,
     cape: value.cape,
     wings: value.wings,
+    wingState: value.wingState,
     clientVersion: value.clientVersion,
     updatedAt: value.updatedAt
   };

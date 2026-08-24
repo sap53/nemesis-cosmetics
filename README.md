@@ -15,12 +15,15 @@ Minecraft world.
 3. Open `http://127.0.0.1:8787/admin`.
 4. Enter the `ADMIN_TOKEN` stored in `.env`.
 
-The client is already configured for `http://127.0.0.1:8787`. Its generated
-`Client Config/CosmeticSync.properties` file can point at a public HTTPS URL.
+The distributed client is configured for
+`https://nemesis-cosmetics.onrender.com`. Older local-only configuration files
+are migrated automatically, so users do not need to edit anything.
 
-Changing a cape or wings publishes the new selection immediately. Normal
-presence refreshes run every two seconds on a low-priority background thread;
-the render thread never waits for the network.
+Changing a cape, wings, or wing animation state publishes the new value
+immediately. While another wing user is visible, clients fetch movement-state
+changes at 10 Hz; otherwise presence refreshes run every two seconds. All
+networking stays on a low-priority background thread, so rendering never waits
+for the backend.
 
 ## Deploy
 
