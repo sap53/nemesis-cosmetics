@@ -82,16 +82,17 @@ const server = http.createServer(async (request, response) => {
       }
 
       const now = Date.now();
-      const presence = {
-        uuid,
-        name: normalizeName(body.name),
-        cape: normalizeCosmetic(body.cape),
-        wings: normalizeCosmetic(body.wings),
-        wingState: normalizeWingState(body.wingState),
-        clientVersion: normalizeVersion(body.clientVersion),
-        updatedAt: now
-      };
-      presences.set(uuid, presence);
+      let presence = presences.get(uuid);
+      if (!presence) {
+        presence = { uuid };
+        presences.set(uuid, presence);
+      }
+      presence.name = normalizeName(body.name);
+      presence.cape = normalizeCosmetic(body.cape);
+      presence.wings = normalizeCosmetic(body.wings);
+      presence.wingState = normalizeWingState(body.wingState);
+      presence.clientVersion = normalizeVersion(body.clientVersion);
+      presence.updatedAt = now;
 
       const requested = Array.isArray(body.players)
         ? body.players.slice(0, MAX_QUERY_PLAYERS)
@@ -102,7 +103,9 @@ const server = http.createServer(async (request, response) => {
         if (!requestedUuid) continue;
         const remote = presences.get(requestedUuid);
         if (remote && now - remote.updatedAt <= PRESENCE_TTL_MS) {
-          players[requestedUuid] = publicPresence(remote);
+          // Presence objects already contain only public fields. Reuse them
+          // instead of allocating another object for every player at 10 Hz.
+          players[requestedUuid] = remote;
         }
       }
 
