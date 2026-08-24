@@ -51,73 +51,92 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'GET' && url.pathname === '/v1/admin/players') {
-      if (!hasBearerToken(request, ADMIN_TOKEN)) {
-        sendJson(response, 401, { error: 'unauthorized' });
-        return;
-      }
-      pruneExpired();
-      const players = Array.from(presences.values())
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .map(publicPresence);
-      sendJson(response, 200, { players, serverTime: Date.now() });
-      return;
+if (request.method === 'GET' && url.pathname === '/v1/admin/players') {
+  if (!hasBearerToken(request, ADMIN_TOKEN)) {
+    sendJson(response, 401, { error: 'unauthorized' });
+    return;
+  }
+
+  pruneExpired();
+  const players = Array.from(presences.values())
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map(publicPresence);
+
+  sendJson(response, 200, { players, serverTime: Date.now() });
+  return;
+}
+
+if (request.method === 'GET' && url.pathname === '/v1/users') {
+  if (!safeEqual(request.headers['x-cosmetic-key'], COSMETIC_API_KEY)) {
+    sendJson(response, 401, { error: 'unauthorized' });
+    return;
+  }
+
+  pruneExpired();
+  const users = Array.from(presences.values())
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((presence) => presence.name);
+
+  sendJson(response, 200, { users });
+  return;
+}
+
+if (request.method === 'POST' && url.pathname === '/v1/sync') {
+  if (!safeEqual(request.headers['x-cosmetic-key'], COSMETIC_API_KEY)) {
+    sendJson(response, 401, { error: 'unauthorized' });
+    return;
+  }
+
+  if (!consumeRateLimit(getClientAddress(request))) {
+    sendJson(response, 429, { error: 'rate_limited' });
+    return;
+  }
+
+  const body = await readJson(request);
+  const uuid = normalizeUuid(body.uuid);
+  if (!uuid) {
+    sendJson(response, 400, { error: 'invalid_uuid' });
+    return;
+  }
+
+  const now = Date.now();
+  let presence = presences.get(uuid);
+  if (!presence) {
+    presence = { uuid };
+    presences.set(uuid, presence);
+  }
+
+  presence.name = normalizeName(body.name);
+  presence.cape = normalizeCosmetic(body.cape);
+  presence.wings = normalizeCosmetic(body.wings);
+  presence.wingState = normalizeWingState(body.wingState);
+  presence.clientVersion = normalizeVersion(body.clientVersion);
+  presence.updatedAt = now;
+
+  const requested = Array.isArray(body.players)
+    ? body.players.slice(0, MAX_QUERY_PLAYERS)
+    : [];
+
+  const players = {};
+  for (const rawUuid of requested) {
+    const requestedUuid = normalizeUuid(rawUuid);
+    if (!requestedUuid) continue;
+
+    const remote = presences.get(requestedUuid);
+    if (remote && now - remote.updatedAt <= PRESENCE_TTL_MS) {
+      players[requestedUuid] = remote;
     }
+  }
 
-    if (request.method === 'POST' && url.pathname === '/v1/sync') {
-      if (!safeEqual(request.headers['x-cosmetic-key'], COSMETIC_API_KEY)) {
-        sendJson(response, 401, { error: 'unauthorized' });
-        return;
-      }
-      if (!consumeRateLimit(getClientAddress(request))) {
-        sendJson(response, 429, { error: 'rate_limited' });
-        return;
-      }
+  sendJson(response, 200, {
+    players,
+    expiresInMillis: PRESENCE_TTL_MS,
+    serverTime: now
+  });
+  return;
+}
 
-      const body = await readJson(request);
-      const uuid = normalizeUuid(body.uuid);
-      if (!uuid) {
-        sendJson(response, 400, { error: 'invalid_uuid' });
-        return;
-      }
-
-      const now = Date.now();
-      let presence = presences.get(uuid);
-      if (!presence) {
-        presence = { uuid };
-        presences.set(uuid, presence);
-      }
-      presence.name = normalizeName(body.name);
-      presence.cape = normalizeCosmetic(body.cape);
-      presence.wings = normalizeCosmetic(body.wings);
-      presence.wingState = normalizeWingState(body.wingState);
-      presence.clientVersion = normalizeVersion(body.clientVersion);
-      presence.updatedAt = now;
-
-      const requested = Array.isArray(body.players)
-        ? body.players.slice(0, MAX_QUERY_PLAYERS)
-        : [];
-      const players = {};
-      for (const rawUuid of requested) {
-        const requestedUuid = normalizeUuid(rawUuid);
-        if (!requestedUuid) continue;
-        const remote = presences.get(requestedUuid);
-        if (remote && now - remote.updatedAt <= PRESENCE_TTL_MS) {
-          // Presence objects already contain only public fields. Reuse them
-          // instead of allocating another object for every player at 10 Hz.
-          players[requestedUuid] = remote;
-        }
-      }
-
-      sendJson(response, 200, {
-        players,
-        expiresInMillis: PRESENCE_TTL_MS,
-        serverTime: now
-      });
-      return;
-    }
-
-    sendJson(response, 404, { error: 'not_found' });
+sendJson(response, 404, { error: 'not_found' });
   } catch (error) {
     if (error && error.code === 'BODY_TOO_LARGE') {
       sendJson(response, 413, { error: 'body_too_large' });
